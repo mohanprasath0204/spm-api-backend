@@ -1,0 +1,40 @@
+Category,Parameter,Godrej,Toyota,Jungheinrich,Linde
+Productivity (P),Load Capacity (kg),1500,1500,1600,1600
+Productivity (P),Max Lift Height (mm),11500,11500,11500,11500
+Productivity (P),Free Lift Height (mm),3800,4000,4100,3900
+Productivity (P),Fork Dimensions (mm),1150x120x40,1150x122x40,1150x120x40,1150x120x40
+Productivity (P),Aisle Width (mm),2850,2750,2700,2800
+Productivity (P),Turning Radius (mm),1750,1680,1650,1710
+Productivity (P),Travel Speed (km/h),10.5,11.0,12.0,11.0
+Productivity (P),Lift Speed (m/s),0.35,0.40,0.45,0.42
+Productivity (P),Chassis Width (mm),1270,1250,1240,1260
+Quality (Q),Battery Type,Lead-Acid,Li-Ion,Li-Ion,Li-Ion
+Quality (Q),Battery Capacity (V/Ah),48V/560Ah,48V/600Ah,48V/620Ah,48V/560Ah
+Quality (Q),Charger Specifications,Standard,High-Frequency,Intelligent,Smart
+Quality (Q),Opportunity Charging Support,No,Yes,Yes,Yes
+Quality (Q),Motor Rating (kW),6.5,6.9,7.0,6.5
+Quality (Q),Warranty Terms (Months),12,24,24,12
+Cost (C),Base Machine Cost (INR),1450000,1820000,1950000,1780000
+Cost (C),Freight & Transit Insurance (INR),35000,0,0,45000
+Cost (C),Unloading & Installation (INR),15000,0,0,0
+Cost (C),Applicable GST (%),18,18,18,18
+Cost (C),Total Landed CapEx (INR),1770000,2147600,2301000,2153500
+Cost (C),Year 1 Maintenance,0,0,0,0
+Cost (C),Year 2 AMC Charges (INR),30000,50000,55000,45000
+Cost (C),Year 3 AMC Charges (INR),32000,52000,58000,48000
+Cost (C),Year 4 AMC Charges (INR),35000,55000,60000,50000
+Cost (C),Year 5 AMC Charges (INR),38000,60000,65000,55000
+Cost (C),Estimated Battery Replacement Cost (INR),250000,0,0,280000
+Delivery (D),Manufacturing Lead Time (Weeks),7,13,15,11
+Delivery (D),Transit & Custom Clearance (Days),5,21,25,18
+Delivery (D),Readiness for Commissioning,Immediate,Delayed,Delayed,Moderate
+Management (M),Spare Parts Availability,Local,Regional,Hub Bound,Regional
+Management (M),Service Engineer Proximity (kms),50,100,150,100
+Management (M),Fleet Management Software,Optional,Toyota I_Site,Jungheinrich ISM,Linde Connect
+Safety (S),Anti-Rollback System,Yes,Yes,Yes,Yes
+Safety (S),Blue Spot Safety Light,No,Yes,Yes,Yes
+Safety (S),Reverse Synchronized Alarm,Yes,Yes,Yes,Yes
+Safety (S),Operator Presence System,No,Yes,Yes,Yes
+Safety (S),Auto-Deceleration Control,No,Yes,Yes,Yes
+Safety (S),Emergency Power Cut-off,Yes,Yes,Yes,Yes
+Summary,Technical Compliance Score (%),82,94,96,88

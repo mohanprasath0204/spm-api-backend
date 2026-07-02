@@ -1,0 +1,5 @@
+Vendor,Base_CapEx_INR,5_Year_TCO_INR,Lead_Time_Weeks,Auto_Decel_Included,TCO_Diff_vs_Baseline,System_Recommendation
+Godrej,1770000.0,2205000.0,7.0,No,0.0,SHORTLISTED: Lowest TCO & Timeline Compliant
+Toyota,2147600.0,2364600.0,13.0,Yes,159600.0,REJECT: Lead time exceeds plant launch schedule
+Jungheinrich,2301000.0,2539000.0,15.0,Yes,334000.0,REJECT: Lead time exceeds plant launch schedule
+Linde,2153500.0,2631500.0,11.0,Yes,426500.0,HOLD: High cost / Monitor for backup
