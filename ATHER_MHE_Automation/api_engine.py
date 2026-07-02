@@ -8,7 +8,7 @@ import json
 import os
 from datetime import datetime
 from contextlib import asynccontextmanager
-from sqlmodel import Field, SQLModel, create_engine, Session
+from sqlmodel import Field, SQLModel, create_engine, Session, select
 
 # 1. DATABASE SETUP
 class DecisionLog(SQLModel, table=True):
@@ -59,8 +59,7 @@ class SPMRequest(BaseModel):
     weight_delivery: float
     weight_safety: float
 
-# 4. SECURED ENDPOINT
-# Notice the added 'token' dependency here
+# 4. SECURED POST ENDPOINT (Math & Saving)
 @app.post("/api/v1/rank-suppliers")
 def rank_suppliers(payload: SPMRequest, token: str = Depends(verify_token)):
     try:
@@ -90,5 +89,20 @@ def rank_suppliers(payload: SPMRequest, token: str = Depends(verify_token)):
                 session.commit()
 
         return {"status": "success", "data": result_data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 5. SECURED GET ENDPOINT (Retrieving History)
+@app.get("/api/v1/history")
+def get_history(token: str = Depends(verify_token)):
+    try:
+        if hasattr(app.state, "db_engine"):
+            with Session(app.state.db_engine) as session:
+                # Grab the 10 most recent decisions from the database
+                statement = select(DecisionLog).order_by(DecisionLog.timestamp.desc()).limit(10)
+                results = session.exec(statement).all()
+                return {"status": "success", "data": results}
+        else:
+            raise HTTPException(status_code=500, detail="Database engine not initialized")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
