@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Security
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
@@ -9,35 +10,39 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 from sqlmodel import Field, SQLModel, create_engine, Session
 
-# 1. DEFINE THE TABLE STRUCTURE (But don't connect yet!)
+# 1. DATABASE SETUP
 class DecisionLog(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     weights_json: str
     results_json: str
 
-# 2. LIFESPAN MANAGEMENT (Safely creates tables when the app boots up)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     DATABASE_URL = os.getenv("DATABASE_URL")
     if not DATABASE_URL:
-        print("❌ WARNING: DATABASE_URL environment variable is missing!")
+        print("❌ WARNING: DATABASE_URL missing!")
     else:
-        # If Supabase gives a 'postgres://' string, SQLAlchemy needs 'postgresql://'
         if DATABASE_URL.startswith("postgres://"):
             DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-        
-        # Initialize engine and create tables
         app.state.db_engine = create_engine(DATABASE_URL)
         SQLModel.metadata.create_all(app.state.db_engine)
         print("🚀 Successfully connected to Supabase and verified tables!")
     yield
 
-# 3. INITIALIZE FASTAPI WITH LIFESPAN
 app = FastAPI(title="SPM Enterprise API", version="2.0", lifespan=lifespan)
-
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+# 2. SECURITY LAYER
+security = HTTPBearer()
+API_SECRET_TOKEN = os.getenv("API_SECRET_TOKEN", "default-dev-token")
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Security(security)):
+    if credentials.credentials != API_SECRET_TOKEN:
+        raise HTTPException(status_code=403, detail="Access denied: Invalid authentication token.")
+    return credentials.credentials
+
+# 3. DATA MODELS
 class Supplier(BaseModel):
     vendor_name: str
     base_capex: float
@@ -54,13 +59,14 @@ class SPMRequest(BaseModel):
     weight_delivery: float
     weight_safety: float
 
+# 4. SECURED ENDPOINT
+# Notice the added 'token' dependency here
 @app.post("/api/v1/rank-suppliers")
-def rank_suppliers(payload: SPMRequest):
+def rank_suppliers(payload: SPMRequest, token: str = Depends(verify_token)):
     try:
         data = [s.dict() for s in payload.suppliers]
         df = pd.DataFrame(data)
 
-        # Procurement Math Logic
         df['safety_penalty'] = df['has_auto_decel'].apply(lambda x: 0 if x else 50000)
         df['5_Year_TCO'] = df['base_capex'] + df['total_amc'] + df['battery_cost'] + df['safety_penalty']
         df['safety_score'] = df['has_auto_decel'].apply(lambda x: 100 if x else 0)
@@ -74,7 +80,6 @@ def rank_suppliers(payload: SPMRequest):
         
         result_data = df.sort_values(by='final_ahp_score', ascending=False).to_dict(orient='records')
 
-        # 4. SAVE TO SUPABASE (Using safe application state engine)
         if hasattr(app.state, "db_engine"):
             with Session(app.state.db_engine) as session:
                 log = DecisionLog(
