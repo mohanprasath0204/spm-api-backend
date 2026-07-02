@@ -1,10 +1,20 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
 import pandas as pd
 
 # Initialize the Enterprise API
 app = FastAPI(title="Supplier Performance Management API", version="1.0")
+
+# Security Bypass for React Frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 print("🟢 API Server Initializing...")
 
@@ -22,7 +32,6 @@ class Supplier(BaseModel):
 
 class SPMRequest(BaseModel):
     suppliers: List[Supplier]
-    # Default weights, but the frontend can change them dynamically
     weight_cost: float = 0.40
     weight_tech: float = 0.30
     weight_delivery: float = 0.20
@@ -61,7 +70,6 @@ def rank_suppliers(payload: SPMRequest):
         # 4. Sort and format the output
         df = df.sort_values(by='final_ahp_score', ascending=False)
         
-        # Convert back to a dictionary so the React frontend can read it
         return {
             "status": "success",
             "message": "AHP Multi-Criteria Math Executed Successfully",
@@ -69,12 +77,4 @@ def rank_suppliers(payload: SPMRequest):
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))from fastapi.middleware.cors import CORSMiddleware
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], # In production, replace "*" with your React URL
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+        raise HTTPException(status_code=500, detail=str(e))
