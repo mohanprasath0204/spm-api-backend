@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
@@ -6,22 +6,35 @@ import pandas as pd
 import json
 import os
 from datetime import datetime
+from contextlib import asynccontextmanager
 from sqlmodel import Field, SQLModel, create_engine, Session
 
-# 1. DATABASE SETUP
-DATABASE_URL = os.getenv("DATABASE_URL") # Add this to Render Environment Variables
-engine = create_engine(DATABASE_URL)
-
+# 1. DEFINE THE TABLE STRUCTURE (But don't connect yet!)
 class DecisionLog(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     weights_json: str
     results_json: str
 
-# Create tables in Postgres on startup
-SQLModel.metadata.create_all(engine)
+# 2. LIFESPAN MANAGEMENT (Safely creates tables when the app boots up)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if not DATABASE_URL:
+        print("❌ WARNING: DATABASE_URL environment variable is missing!")
+    else:
+        # If Supabase gives a 'postgres://' string, SQLAlchemy needs 'postgresql://'
+        if DATABASE_URL.startswith("postgres://"):
+            DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+        
+        # Initialize engine and create tables
+        app.state.db_engine = create_engine(DATABASE_URL)
+        SQLModel.metadata.create_all(app.state.db_engine)
+        print("🚀 Successfully connected to Supabase and verified tables!")
+    yield
 
-app = FastAPI(title="SPM Enterprise API", version="2.0")
+# 3. INITIALIZE FASTAPI WITH LIFESPAN
+app = FastAPI(title="SPM Enterprise API", version="2.0", lifespan=lifespan)
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
@@ -47,7 +60,7 @@ def rank_suppliers(payload: SPMRequest):
         data = [s.dict() for s in payload.suppliers]
         df = pd.DataFrame(data)
 
-        # Logic
+        # Procurement Math Logic
         df['safety_penalty'] = df['has_auto_decel'].apply(lambda x: 0 if x else 50000)
         df['5_Year_TCO'] = df['base_capex'] + df['total_amc'] + df['battery_cost'] + df['safety_penalty']
         df['safety_score'] = df['has_auto_decel'].apply(lambda x: 100 if x else 0)
@@ -61,14 +74,15 @@ def rank_suppliers(payload: SPMRequest):
         
         result_data = df.sort_values(by='final_ahp_score', ascending=False).to_dict(orient='records')
 
-        # 2. SAVE TO POSTGRES (Audit Trail)
-        with Session(engine) as session:
-            log = DecisionLog(
-                weights_json=json.dumps(payload.dict(exclude={'suppliers'})),
-                results_json=json.dumps(result_data)
-            )
-            session.add(log)
-            session.commit()
+        # 4. SAVE TO SUPABASE (Using safe application state engine)
+        if hasattr(app.state, "db_engine"):
+            with Session(app.state.db_engine) as session:
+                log = DecisionLog(
+                    weights_json=json.dumps(payload.dict(exclude={'suppliers'})),
+                    results_json=json.dumps(result_data)
+                )
+                session.add(log)
+                session.commit()
 
         return {"status": "success", "data": result_data}
     except Exception as e:
