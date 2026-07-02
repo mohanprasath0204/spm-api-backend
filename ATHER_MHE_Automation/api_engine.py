@@ -1,26 +1,30 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
 import pandas as pd
+import json
+import os
+from datetime import datetime
+from sqlmodel import Field, SQLModel, create_engine, Session
 
-# Initialize the Enterprise API
-app = FastAPI(title="Supplier Performance Management API", version="1.0")
+# 1. DATABASE SETUP
+DATABASE_URL = os.getenv("DATABASE_URL") # Add this to Render Environment Variables
+engine = create_engine(DATABASE_URL)
 
-# Security Bypass for React Frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+class DecisionLog(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    weights_json: str
+    results_json: str
 
-print("🟢 API Server Initializing...")
+# Create tables in Postgres on startup
+SQLModel.metadata.create_all(engine)
 
-# ==========================================
-# 1. DEFINE THE DATA SCHEMA (Strict Validation)
-# ==========================================
+app = FastAPI(title="SPM Enterprise API", version="2.0")
+
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
 class Supplier(BaseModel):
     vendor_name: str
     base_capex: float
@@ -32,49 +36,40 @@ class Supplier(BaseModel):
 
 class SPMRequest(BaseModel):
     suppliers: List[Supplier]
-    weight_cost: float = 0.40
-    weight_tech: float = 0.30
-    weight_delivery: float = 0.20
-    weight_safety: float = 0.10
+    weight_cost: float
+    weight_tech: float
+    weight_delivery: float
+    weight_safety: float
 
-# ==========================================
-# 2. THE EVALUATION ENDPOINT
-# ==========================================
 @app.post("/api/v1/rank-suppliers")
 def rank_suppliers(payload: SPMRequest):
     try:
-        # 1. Convert incoming JSON from the frontend into a Pandas DataFrame
-        data = [supplier.dict() for supplier in payload.suppliers]
+        data = [s.dict() for s in payload.suppliers]
         df = pd.DataFrame(data)
 
-        # 2. Calculate TCO & Safety Penalties
+        # Logic
         df['safety_penalty'] = df['has_auto_decel'].apply(lambda x: 0 if x else 50000)
         df['5_Year_TCO'] = df['base_capex'] + df['total_amc'] + df['battery_cost'] + df['safety_penalty']
         df['safety_score'] = df['has_auto_decel'].apply(lambda x: 100 if x else 0)
-
-        # 3. AHP Normalized Scoring
-        min_tco = df['5_Year_TCO'].min()
-        min_lead_time = df['lead_time_weeks'].min()
-
-        df['norm_cost'] = (min_tco / df['5_Year_TCO']) * 100
-        df['norm_delivery'] = (min_lead_time / df['lead_time_weeks']) * 100
-
-        # Apply the weights dynamically passed from the UI
+        
         df['final_ahp_score'] = (
-            (df['norm_cost'] * payload.weight_cost) +
+            ((df['5_Year_TCO'].min() / df['5_Year_TCO']) * 100 * payload.weight_cost) +
             (df['tech_score'] * payload.weight_tech) +
-            (df['norm_delivery'] * payload.weight_delivery) +
+            ((df['lead_time_weeks'].min() / df['lead_time_weeks']) * 100 * payload.weight_delivery) +
             (df['safety_score'] * payload.weight_safety)
         )
-
-        # 4. Sort and format the output
-        df = df.sort_values(by='final_ahp_score', ascending=False)
         
-        return {
-            "status": "success",
-            "message": "AHP Multi-Criteria Math Executed Successfully",
-            "data": df[['vendor_name', 'final_ahp_score', '5_Year_TCO', 'lead_time_weeks']].to_dict(orient='records')
-        }
+        result_data = df.sort_values(by='final_ahp_score', ascending=False).to_dict(orient='records')
 
+        # 2. SAVE TO POSTGRES (Audit Trail)
+        with Session(engine) as session:
+            log = DecisionLog(
+                weights_json=json.dumps(payload.dict(exclude={'suppliers'})),
+                results_json=json.dumps(result_data)
+            )
+            session.add(log)
+            session.commit()
+
+        return {"status": "success", "data": result_data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
